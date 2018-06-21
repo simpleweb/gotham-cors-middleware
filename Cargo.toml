@@ -4,3 +4,8 @@ version = "0.1.0"
 authors = ["Andy Bell <andy.bell.github@gmail.com>"]
 
 [dependencies]
+futures = "0.1"
+gotham = "0.2"
+gotham_derive = "0.2"
+hyper = "0.11"
+unicase = "2.1"
