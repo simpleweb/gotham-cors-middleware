@@ -26,10 +26,17 @@ impl Middleware for CORSMiddleware {
         Chain: FnOnce(State) -> Box<HandlerFuture>,
     {
         let f = chain(state).map(|(state, response)| {
-            let origin = Headers::borrow_from(&state)
-                .get::<Origin>()
-                .unwrap()
-                .to_string();
+            let origin = {
+                let origin_raw = Headers::borrow_from(&state)
+                    .get::<Origin>()
+                    .clone();
+                let ori = match origin_raw {
+                    Some(o) => o.to_string(),
+                    None => "*".to_string(),
+                };
+                
+                ori
+            };
 
             let mut headers = Headers::new();
 
@@ -50,7 +57,6 @@ impl Middleware for CORSMiddleware {
             ]));
             headers.set(AccessControlMaxAge(86400));
 
-            println!("setting headers");
             let res = response.with_headers(headers);
 
             (state, res)
