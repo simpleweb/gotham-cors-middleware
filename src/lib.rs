@@ -74,12 +74,12 @@ mod tests {
     use gotham::http::response::create_response;
     use gotham::pipeline::new_pipeline;
     use gotham::pipeline::single::single_pipeline;
-    use gotham::router::Router;
     use gotham::router::builder::*;
+    use gotham::router::Router;
     use gotham::test::TestServer;
     use hyper::Method::Options;
-    use hyper::{Get, Head};
     use hyper::StatusCode;
+    use hyper::{Get, Head};
 
     // Since we cannot construct 'State' ourselves, we need to test via an 'actual' app
     fn handler(state: State) -> Box<HandlerFuture> {
@@ -95,13 +95,9 @@ mod tests {
     }
 
     fn router() -> Router {
-        let (chain, pipeline) = single_pipeline(
-            new_pipeline()
-            .add(CORSMiddleware)
-            .build(),
-        );
+        let (chain, pipeline) = single_pipeline(new_pipeline().add(CORSMiddleware).build());
 
-        build_router(chain,pipeline, |route| {
+        build_router(chain, pipeline, |route| {
             route.request(vec![Get, Head, Options], "/").to(handler);
         })
     }
@@ -118,8 +114,16 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::Ok);
         let headers = response.headers();
-        assert_eq!(headers.get::<AccessControlAllowOrigin>().unwrap().to_string(), "*".to_string()); 
-        assert_eq!(headers.get::<AccessControlMaxAge>().unwrap().to_string(), "86400".to_string()); 
-
+        assert_eq!(
+            headers
+                .get::<AccessControlAllowOrigin>()
+                .unwrap()
+                .to_string(),
+            "*".to_string()
+        );
+        assert_eq!(
+            headers.get::<AccessControlMaxAge>().unwrap().to_string(),
+            "86400".to_string()
+        );
     }
 }
