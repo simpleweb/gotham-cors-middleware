@@ -64,3 +64,62 @@ impl Middleware for CORSMiddleware {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    extern crate mime;
+
+    use super::*;
+
+    use futures::future;
+    use gotham::http::response::create_response;
+    use gotham::pipeline::new_pipeline;
+    use gotham::pipeline::single::single_pipeline;
+    use gotham::router::Router;
+    use gotham::router::builder::*;
+    use gotham::test::TestServer;
+    use hyper::Method::Options;
+    use hyper::{Get, Head};
+    use hyper::StatusCode;
+
+    // Since we cannot construct 'State' ourselves, we need to test via an 'actual' app
+    fn handler(state: State) -> Box<HandlerFuture> {
+        let body = "Hello World".to_string();
+
+        let response = create_response(
+            &state,
+            StatusCode::Ok,
+            Some((body.into_bytes(), mime::TEXT_PLAIN)),
+        );
+
+        Box::new(future::ok((state, response)))
+    }
+
+    fn router() -> Router {
+        let (chain, pipeline) = single_pipeline(
+            new_pipeline()
+            .add(CORSMiddleware)
+            .build(),
+        );
+
+        build_router(chain,pipeline, |route| {
+            route.request(vec![Get, Head, Options], "/").to(handler);
+        })
+    }
+
+    #[test]
+    fn test_headers_set() {
+        let test_server = TestServer::new(router()).unwrap();
+
+        let response = test_server
+            .client()
+            .get("https://example.com/")
+            .perform()
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::Ok);
+        let headers = response.headers();
+        assert_eq!(headers.get::<AccessControlAllowOrigin>().unwrap().to_string(), "*".to_string()); 
+        assert_eq!(headers.get::<AccessControlMaxAge>().unwrap().to_string(), "86400".to_string()); 
+
+    }
+}

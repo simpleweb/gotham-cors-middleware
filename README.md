@@ -29,6 +29,6 @@ pub fn router() -> Router {
 ```
 
 Roadmap:
-- [ ] Add integration tests
+- [x] Add integration tests
 - [ ] Add builder that would allow header customisation
 - [ ] Add documentation
