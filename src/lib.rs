@@ -27,14 +27,12 @@ impl Middleware for CORSMiddleware {
     {
         let f = chain(state).map(|(state, response)| {
             let origin = {
-                let origin_raw = Headers::borrow_from(&state)
-                    .get::<Origin>()
-                    .clone();
+                let origin_raw = Headers::borrow_from(&state).get::<Origin>().clone();
                 let ori = match origin_raw {
                     Some(o) => o.to_string(),
                     None => "*".to_string(),
                 };
-                
+
                 ori
             };
 
