@@ -2,6 +2,10 @@
 name = "gotham-cors-middleware"
 version = "0.1.0"
 authors = ["Andy Bell <andy.bell.github@gmail.com>"]
+description = "A small crate to add basic CORS functionality to Gotham apps"
+repository = "https://github.com/simpleweb/gotham-cors-middleware"
+readme = "./README.md"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 futures = "0.1"
