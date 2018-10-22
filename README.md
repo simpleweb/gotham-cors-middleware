@@ -2,7 +2,9 @@
 
 This library is aimed to provide CORS functionality to [Gotham.rs](https://gotham.rs/) servers.
 
-Currently this is a very simple implementation with no customisability.
+Currently this is a very simple implementation with limited customisability.
+
+Requires rust 1.26 or later.
 
 Usage:
 ```rust
@@ -18,7 +20,7 @@ use gotham::router::Router;
 pub fn router() -> Router {
     let (chain, pipeline) = single_pipeline(
         new_pipeline()
-            .add(CORSMiddleware)
+            .add(CORSMiddleware::default())
             .build(),
     );
 
@@ -30,5 +32,6 @@ pub fn router() -> Router {
 
 Roadmap:
 - [x] Add integration tests
-- [ ] Add builder that would allow header customisation
-- [ ] Add documentation
+- [x] Add builder that would allow header customisation
+- [x] Add documentation
+- [ ] See how next version of Gotham requires changes to middeware structure
