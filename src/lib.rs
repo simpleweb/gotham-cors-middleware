@@ -68,6 +68,42 @@ impl CORSMiddleware {
     /// returning the sender origin on request or returning
     /// a string of "*" - see the call function source) and
     /// max age to be a u32 value.
+    ///
+    /// Example of use:
+    /// ```rust
+    /// extern crate gotham;
+    /// extern crate gotham_cors_middleware;
+    /// extern crate hyper;
+    ///
+    /// use gotham::pipeline::new_pipeline;
+    /// use gotham_cors_middleware::CORSMiddleware;
+    /// use gotham::pipeline::single::single_pipeline;
+    /// use gotham::router::builder::*;
+    /// use gotham::router::Router;
+    /// use hyper::Method;
+    ///
+    /// fn create_custom_middleware() -> CORSMiddleware {
+    ///     let methods = vec![Method::Delete, Method::Get, Method::Head, Method::Options];
+    ///
+    ///     let max_age = 1000;
+    ///
+    ///     let origin = Some("http://www.example.com".to_string());
+    ///
+    ///     CORSMiddleware::new(methods, origin, max_age)
+    /// }
+    ///
+    /// pub fn router() -> Router {
+    ///     let (chain, pipeline) = single_pipeline(
+    ///         new_pipeline()
+    ///             .add(create_custom_middleware())
+    ///             .build()
+    ///     );
+    ///
+    ///     build_router(chain, pipeline, |route| {
+    ///         // Routes
+    ///     })
+    /// }
+    /// ```
     pub fn new(methods: Vec<Method>, origin: Option<String>, max_age: u32) -> CORSMiddleware {
         CORSMiddleware {
             methods,
@@ -96,11 +132,7 @@ impl CORSMiddleware {
         let origin = None;
         let max_age = 86400;
 
-        CORSMiddleware {
-            methods,
-            origin,
-            max_age,
-        }
+        CORSMiddleware::new(methods, origin, max_age)
     }
 }
 
