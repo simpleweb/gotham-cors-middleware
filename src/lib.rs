@@ -59,6 +59,15 @@ pub struct CORSMiddleware {
 }
 
 impl CORSMiddleware {
+    /// Create a new CORSMiddleware with custom methods,
+    /// origin and max_age properties.
+    ///
+    /// Expects methods to be a Vec of hyper::Method enum
+    /// values, origin to be an Option containing a String
+    /// (so allows for None values - which defaults to
+    /// returning the sender origin on request or returning
+    /// a string of "*" - see the call function source) and
+    /// max age to be a u32 value.
     pub fn new(methods: Vec<Method>, origin: Option<String>, max_age: u32) -> CORSMiddleware {
         CORSMiddleware {
             methods,
@@ -67,6 +76,12 @@ impl CORSMiddleware {
         }
     }
 
+    /// Creates a new CORSMiddleware with what is currently
+    /// the "default" values for methods/origin/max_age.
+    ///
+    /// This is based off the values that were used previously
+    /// before they were customisable. If you need different
+    /// values, use the new() function.
     pub fn default() -> CORSMiddleware {
         let methods = vec![
             Method::Delete,
