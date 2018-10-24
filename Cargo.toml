@@ -9,9 +9,10 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 futures = "0.1"
-gotham = "0.2"
-gotham_derive = "0.2"
-hyper = "0.11"
+gotham = { path = "../gotham/gotham" }
+gotham_derive = { path = "../gotham/gotham_derive" }
+http = "0.1"
+hyper = "0.12"
 unicase = "2.1"
 
 [dev-dependencies]
