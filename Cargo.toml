@@ -6,12 +6,12 @@ description = "A small crate to add basic CORS functionality to Gotham apps"
 repository = "https://github.com/simpleweb/gotham-cors-middleware"
 readme = "./README.md"
 license = "MIT OR Apache-2.0"
+edition = "2018"
 
 [dependencies]
-futures = "0.1"
-gotham = "0.2"
-gotham_derive = "0.2"
-hyper = "0.11"
+futures = "0.3"
+gotham = "0.5"
+gotham_derive = "0.5"
 unicase = "2.1"
 
 [dev-dependencies]

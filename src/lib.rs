@@ -6,22 +6,21 @@
 #[macro_use]
 extern crate gotham_derive;
 
-extern crate futures;
-extern crate gotham;
-extern crate hyper;
-extern crate unicase;
-
-use futures::Future;
-use gotham::handler::HandlerFuture;
-use gotham::middleware::Middleware;
-use gotham::state::{FromState, State};
-use hyper::header::{
-    AccessControlAllowCredentials, AccessControlAllowHeaders, AccessControlAllowMethods,
-    AccessControlAllowOrigin, AccessControlMaxAge, Headers, Origin,
+use futures::prelude::*;
+use gotham::{
+    handler::HandlerFuture,
+    hyper::{
+        header::{
+            HeaderMap, HeaderValue, ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_HEADERS,
+            ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_MAX_AGE,
+            AUTHORIZATION, CONTENT_TYPE, ORIGIN,
+        },
+        Method,
+    },
+    middleware::Middleware,
+    state::{FromState, State},
 };
-use hyper::Method;
-use std::option::Option;
-use unicase::Ascii;
+use std::{option::Option, pin::Pin};
 
 /// Struct to perform the necessary CORS
 /// functionality needed. Allows some
@@ -73,17 +72,16 @@ impl CORSMiddleware {
     /// ```rust
     /// extern crate gotham;
     /// extern crate gotham_cors_middleware;
-    /// extern crate hyper;
     ///
-    /// use gotham::pipeline::new_pipeline;
+    /// use gotham::{
+    ///     pipeline::{new_pipeline, single::single_pipeline},
+    ///     router::{Router, builder::*},
+    ///     hyper::Method,
+    /// };
     /// use gotham_cors_middleware::CORSMiddleware;
-    /// use gotham::pipeline::single::single_pipeline;
-    /// use gotham::router::builder::*;
-    /// use gotham::router::Router;
-    /// use hyper::Method;
     ///
     /// fn create_custom_middleware() -> CORSMiddleware {
-    ///     let methods = vec![Method::Delete, Method::Get, Method::Head, Method::Options];
+    ///     let methods = vec![Method::DELETE, Method::GET, Method::HEAD, Method::OPTIONS];
     ///
     ///     let max_age = 1000;
     ///
@@ -120,13 +118,13 @@ impl CORSMiddleware {
     /// values, use the new() function.
     pub fn default() -> CORSMiddleware {
         let methods = vec![
-            Method::Delete,
-            Method::Get,
-            Method::Head,
-            Method::Options,
-            Method::Patch,
-            Method::Post,
-            Method::Put,
+            Method::DELETE,
+            Method::GET,
+            Method::HEAD,
+            Method::OPTIONS,
+            Method::PATCH,
+            Method::POST,
+            Method::PUT,
         ];
 
         let origin = None;
@@ -137,42 +135,63 @@ impl CORSMiddleware {
 }
 
 impl Middleware for CORSMiddleware {
-    fn call<Chain>(self, state: State, chain: Chain) -> Box<HandlerFuture>
+    fn call<Chain>(self, state: State, chain: Chain) -> Pin<Box<HandlerFuture>>
     where
-        Chain: FnOnce(State) -> Box<HandlerFuture>,
+        Chain: FnOnce(State) -> Pin<Box<HandlerFuture>>,
     {
-        let settings = self.clone();
-        let f = chain(state).map(|(state, response)| {
-            let origin: String;
-            if settings.origin.is_none() {
-                let origin_raw = Headers::borrow_from(&state).get::<Origin>().clone();
-                let ori = match origin_raw {
-                    Some(o) => o.to_string(),
-                    None => "*".to_string(),
-                };
-
-                origin = ori;
-            } else {
-                origin = settings.origin.unwrap();
+        let f = chain(state).and_then(|(state, mut response)| {
+            let origin = match self.origin {
+                Some(o) => o,
+                None => {
+                    let origin_raw = HeaderMap::borrow_from(&state).get(ORIGIN).clone();
+                    match origin_raw {
+                        Some(o) => o.to_str().unwrap().to_string(),
+                        None => "*".to_string(),
+                    }
+                }
             };
 
-            let mut headers = Headers::new();
+            let methods = self
+                .methods
+                .iter()
+                .map(|m| String::from(m.as_str()))
+                .collect::<Vec<String>>()
+                .join(", ");
 
-            headers.set(AccessControlAllowCredentials);
-            headers.set(AccessControlAllowHeaders(vec![
-                Ascii::new("Authorization".to_string()),
-                Ascii::new("Content-Type".to_string()),
-            ]));
-            headers.set(AccessControlAllowOrigin::Value(origin));
-            headers.set(AccessControlAllowMethods(settings.methods));
-            headers.set(AccessControlMaxAge(settings.max_age));
+            let headers = vec![AUTHORIZATION, CONTENT_TYPE]
+                .iter()
+                .map(|m| String::from(m.as_str()))
+                .collect::<Vec<String>>()
+                .join(", ");
 
-            let res = response.with_headers(headers);
+            response.headers_mut().insert(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS,
+                HeaderValue::from_str("true").unwrap(),
+            );
 
-            (state, res)
+            response.headers_mut().insert(
+                ACCESS_CONTROL_ALLOW_ORIGIN,
+                HeaderValue::from_str(&origin).unwrap(),
+            );
+
+            response.headers_mut().insert(
+                ACCESS_CONTROL_ALLOW_HEADERS,
+                HeaderValue::from_str(&headers).unwrap(),
+            );
+
+            response.headers_mut().insert(
+                ACCESS_CONTROL_ALLOW_METHODS,
+                HeaderValue::from_str(&methods).unwrap(),
+            );
+
+            response
+                .headers_mut()
+                .insert(ACCESS_CONTROL_MAX_AGE, HeaderValue::from(self.max_age));
+
+            future::ok((state, response))
         });
 
-        Box::new(f)
+        f.boxed()
     }
 }
 
@@ -182,28 +201,22 @@ mod tests {
 
     use super::*;
 
-    use futures::future;
-    use gotham::http::response::create_response;
-    use gotham::pipeline::new_pipeline;
-    use gotham::pipeline::single::single_pipeline;
-    use gotham::router::builder::*;
-    use gotham::router::Router;
-    use gotham::test::TestServer;
-    use hyper::Method::Options;
-    use hyper::StatusCode;
-    use hyper::{Get, Head};
+    use gotham::{
+        handler::IntoResponse,
+        helpers::http::response::create_response,
+        hyper::{Method, StatusCode},
+        pipeline::{new_pipeline, single::single_pipeline},
+        router::{builder::*, Router},
+        test::TestServer,
+    };
 
     // Since we cannot construct 'State' ourselves, we need to test via an 'actual' app
-    fn handler(state: State) -> Box<HandlerFuture> {
+    fn handler(state: State) -> (State, impl IntoResponse) {
         let body = "Hello World".to_string();
 
-        let response = create_response(
-            &state,
-            StatusCode::Ok,
-            Some((body.into_bytes(), mime::TEXT_PLAIN)),
-        );
+        let response = create_response(&state, StatusCode::OK, mime::TEXT_PLAIN, body.into_bytes());
 
-        Box::new(future::ok((state, response)))
+        (state, response)
     }
 
     fn default_router() -> Router {
@@ -211,12 +224,14 @@ mod tests {
             single_pipeline(new_pipeline().add(CORSMiddleware::default()).build());
 
         build_router(chain, pipeline, |route| {
-            route.request(vec![Get, Head, Options], "/").to(handler);
+            route
+                .request(vec![Method::GET, Method::HEAD, Method::OPTIONS], "/")
+                .to(handler);
         })
     }
 
     fn custom_router() -> Router {
-        let methods = vec![Method::Delete, Method::Get, Method::Head, Method::Options];
+        let methods = vec![Method::DELETE, Method::GET, Method::HEAD, Method::OPTIONS];
 
         let max_age = 1000;
 
@@ -229,7 +244,9 @@ mod tests {
         );
 
         build_router(chain, pipeline, |route| {
-            route.request(vec![Get, Head, Options], "/").to(handler);
+            route
+                .request(vec![Method::GET, Method::HEAD, Method::OPTIONS], "/")
+                .to(handler);
         })
     }
 
@@ -243,17 +260,24 @@ mod tests {
             .perform()
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::Ok);
+        assert_eq!(response.status(), StatusCode::OK);
         let headers = response.headers();
         assert_eq!(
             headers
-                .get::<AccessControlAllowOrigin>()
+                .get(ACCESS_CONTROL_ALLOW_ORIGIN)
+                .unwrap()
+                .to_str()
                 .unwrap()
                 .to_string(),
             "*".to_string()
         );
         assert_eq!(
-            headers.get::<AccessControlMaxAge>().unwrap().to_string(),
+            headers
+                .get(ACCESS_CONTROL_MAX_AGE)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string(),
             "86400".to_string()
         );
     }
@@ -268,24 +292,31 @@ mod tests {
             .perform()
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::Ok);
+        assert_eq!(response.status(), StatusCode::OK);
         let headers = response.headers();
         assert_eq!(
             headers
-                .get::<AccessControlAllowOrigin>()
+                .get(ACCESS_CONTROL_ALLOW_ORIGIN)
+                .unwrap()
+                .to_str()
                 .unwrap()
                 .to_string(),
             "http://www.example.com".to_string()
         );
         assert_eq!(
-            headers.get::<AccessControlMaxAge>().unwrap().to_string(),
+            headers
+                .get(ACCESS_CONTROL_MAX_AGE)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string(),
             "1000".to_string()
         );
     }
 
     #[test]
     fn test_new_cors_middleware() {
-        let methods = vec![Method::Delete, Method::Get, Method::Head, Method::Options];
+        let methods = vec![Method::DELETE, Method::GET, Method::HEAD, Method::OPTIONS];
 
         let max_age = 1000;
 
@@ -306,13 +337,13 @@ mod tests {
     fn test_default_cors_middleware() {
         let test = CORSMiddleware::default();
         let methods = vec![
-            Method::Delete,
-            Method::Get,
-            Method::Head,
-            Method::Options,
-            Method::Patch,
-            Method::Post,
-            Method::Put,
+            Method::DELETE,
+            Method::GET,
+            Method::HEAD,
+            Method::OPTIONS,
+            Method::PATCH,
+            Method::POST,
+            Method::PUT,
         ];
 
         assert_eq!(test.methods, methods);
